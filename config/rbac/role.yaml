@@ -1,0 +1,32 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - reliability.platform.ai
+  resources:
+  - selfhealingpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - reliability.platform.ai
+  resources:
+  - selfhealingpolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - reliability.platform.ai
+  resources:
+  - selfhealingpolicies/status
+  verbs:
+  - get
+  - patch
+  - update
