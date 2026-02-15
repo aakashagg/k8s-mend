@@ -7,7 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/firebase/genkit/go/plugins/compat_oai/openai"
+	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/api/option"
 )
 
 type EvaluationRequest struct {
@@ -68,20 +69,36 @@ Rules:
 }
 
 func CallLLM(prompt string) (EvaluationResponse, error) {
-	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+	ctx := context.Background()
+	client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
+	if err != nil {
+		return EvaluationResponse{}, err
+	}
+	defer client.Close()
 
-	resp, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
-		Model: "gpt-4o-mini",
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("You are a Kubernetes reliability assistant."),
-			openai.UserMessage(prompt),
-		},
-	})
+	model := client.GenerativeModel("gemini-1.5-flash")
+	model.ResponseMIMEType = "application/json"
+	model.SystemInstruction = &genai.Content{
+		Parts: []genai.Part{genai.Text("You are a Kubernetes reliability assistant.")},
+	}
+
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
 		return EvaluationResponse{}, err
 	}
 
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+		return EvaluationResponse{}, fmt.Errorf("no response from Gemini")
+	}
+
+	var responseText string
+	for _, part := range resp.Candidates[0].Content.Parts {
+		if txt, ok := part.(genai.Text); ok {
+			responseText += string(txt)
+		}
+	}
+
 	var result EvaluationResponse
-	err = json.Unmarshal([]byte(resp.Choices[0].Message.Content), &result)
+	err = json.Unmarshal([]byte(responseText), &result)
 	return result, err
 }

@@ -21,23 +21,23 @@ import (
 )
 
 type Target struct {
-	kind          string            `json:"kind,omitempty"`
-	labelSelector map[string]string `json:"labelSelector,omitempty"`
+	Kind          string            `json:"kind,omitempty"`
+	LabelSelector map[string]string `json:"labelSelector,omitempty"`
 }
 
 type Conditions struct {
-	ConditionsType   string `json:"condtionstype,omitempty"`
-	RestartThreshold string `json:""`
+	ConditionsType   string `json:"conditionstype,omitempty"`
+	RestartThreshold string `json:"restartThreshold,omitempty"`
 }
 
 type Resource struct {
-	Target     Target
-	Conditions Conditions
+	Target     Target     `json:"target,omitempty"`
+	Conditions Conditions `json:"conditions,omitempty"`
 }
 
 type AiOptions struct {
-	enabled bool
-	mode    string
+	Enabled bool   `json:"enabled,omitempty"`
+	Mode    string `json:"mode,omitempty"`
 }
 
 // SelfHealingPolicySpec defines the desired state of SelfHealingPolicy
