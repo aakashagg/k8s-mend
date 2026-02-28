@@ -51,7 +51,12 @@ var _ = Describe("SelfHealingPolicy Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: reliabilityv1alpha1.SelfHealingPolicySpec{
+						Target:         reliabilityv1alpha1.ResourceSelector{Kind: "Pod"},
+						Conditions:     []reliabilityv1alpha1.ConditionRule{{Type: "RestartCount", Threshold: 1}},
+						AllowedActions: []reliabilityv1alpha1.HealingAction{reliabilityv1alpha1.HealingActionAnnotate},
+						DryRun:         true,
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

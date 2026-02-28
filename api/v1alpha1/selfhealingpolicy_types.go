@@ -20,6 +20,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// +kubebuilder:validation:Enum=Delete;RolloutRestart;Annotate;NoAction
+// HealingAction defines the actions the controller is allowed to execute.
+type HealingAction string
+
+// Legacy API structs retained for backward compatibility with generated code.
 type Target struct {
 	Kind          string            `json:"kind,omitempty"`
 	LabelSelector map[string]string `json:"labelSelector,omitempty"`
@@ -40,24 +45,122 @@ type AiOptions struct {
 	Mode    string `json:"mode,omitempty"`
 }
 
-// SelfHealingPolicySpec defines the desired state of SelfHealingPolicy
-type SelfHealingPolicySpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+const (
+	HealingActionDelete         HealingAction = "Delete"
+	HealingActionRolloutRestart HealingAction = "RolloutRestart"
+	HealingActionAnnotate       HealingAction = "Annotate"
+	HealingActionNoAction       HealingAction = "NoAction"
+)
 
-	Resource  []Resource
-	AiOptions AiOptions
+// ResourceSelector defines which resources are monitored by the policy.
+type ResourceSelector struct {
+	// APIVersion of the target resource, e.g. apps/v1.
+	// +optional
+	APIVersion string `json:"apiVersion,omitempty"`
+
+	// Kind of the resource to monitor.
+	// +kubebuilder:validation:Required
+	Kind string `json:"kind"`
+
+	// Namespace scope. If empty, the policy namespace is used.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// LabelSelector filters resources by labels.
+	// +optional
+	LabelSelector map[string]string `json:"labelSelector,omitempty"`
+}
+
+// ConditionRule configures when a resource should be considered unhealthy.
+type ConditionRule struct {
+	// Type identifies the metric being evaluated.
+	// Supported values: RestartCount, UnavailableReplicas.
+	// +kubebuilder:validation:Required
+	Type string `json:"type"`
+
+	// Threshold is the minimum metric value that marks a resource as unhealthy.
+	// +kubebuilder:validation:Minimum=1
+	Threshold int32 `json:"threshold"`
+
+	// MinAgeSeconds prevents acting on brand-new resources.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MinAgeSeconds int64 `json:"minAgeSeconds,omitempty"`
+}
+
+// AIOptions controls if and how the AI service should influence decisions.
+type AIOptions struct {
+	// Enabled toggles AI-based decisioning.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Mode decides if AI is only advisory or can enforce actions.
+	// +kubebuilder:validation:Enum=advisory;enforce
+	// +optional
+	Mode string `json:"mode,omitempty"`
+
+	// Endpoint is the AI evaluator endpoint, e.g. http://ai-service:8081/evaluate.
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// TimeoutSeconds for the AI HTTP call.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
+}
+
+// SelfHealingPolicySpec defines the desired state of SelfHealingPolicy.
+type SelfHealingPolicySpec struct {
+	// Legacy field (deprecated): use Target/Conditions/AllowedActions.
+	// +optional
+	Resource []Resource `json:"resource,omitempty"`
+
+	// Legacy field (deprecated): use AI.
+	// +optional
+	AiOptions AiOptions `json:"aiOptions,omitempty"`
+
+	// Target resource selector to evaluate.
+	// +kubebuilder:validation:Required
+	Target ResourceSelector `json:"target"`
+
+	// Conditions determine when to trigger healing.
+	// +kubebuilder:validation:MinItems=1
+	Conditions []ConditionRule `json:"conditions"`
+
+	// AllowedActions limits what this policy is allowed to do.
+	// +kubebuilder:validation:MinItems=1
+	AllowedActions []HealingAction `json:"allowedActions"`
+
+	// AI controls optional AI integration.
+	// +optional
+	AI AIOptions `json:"ai,omitempty"`
+
+	// DryRun records decisions but does not mutate resources.
+	// +optional
+	DryRun bool `json:"dryRun,omitempty"`
 }
 
 // SelfHealingPolicyStatus defines the observed state of SelfHealingPolicy.
 type SelfHealingPolicyStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ObservedGeneration is the latest generation reconciled by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
+	// LastEvaluatedTime is when policy evaluation last completed.
+	// +optional
+	LastEvaluatedTime *metav1.Time `json:"lastEvaluatedTime,omitempty"`
+
+	// LastAction is the last selected action.
+	// +optional
+	LastAction string `json:"lastAction,omitempty"`
+
+	// LastReason explains why LastAction was chosen.
+	// +optional
+	LastReason string `json:"lastReason,omitempty"`
+
+	// HealedResources is the number of resources acted on in the latest run.
+	// +optional
+	HealedResources int32 `json:"healedResources,omitempty"`
 
 	// conditions represent the current state of the SelfHealingPolicy resource.
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
@@ -77,7 +180,7 @@ type SelfHealingPolicyStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// SelfHealingPolicy is the Schema for the selfhealingpolicies API
+// SelfHealingPolicy is the Schema for the selfhealingpolicies API.
 type SelfHealingPolicy struct {
 	metav1.TypeMeta `json:",inline"`
 
@@ -96,7 +199,7 @@ type SelfHealingPolicy struct {
 
 // +kubebuilder:object:root=true
 
-// SelfHealingPolicyList contains a list of SelfHealingPolicy
+// SelfHealingPolicyList contains a list of SelfHealingPolicy.
 type SelfHealingPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitzero"`
