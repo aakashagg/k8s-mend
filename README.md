@@ -1,8 +1,55 @@
 # k8s-mend
-// TODO(user): Add simple overview of use/purpose
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+k8s-mend is a Kubebuilder-based self-healing Kubernetes operator. It introduces a `SelfHealingPolicy` CRD that lets platform users define:
+- which resource kind to monitor (`Pod` or `Deployment`),
+- unhealthy conditions and thresholds,
+- what healing actions are allowed,
+- whether AI should advise or enforce the selected action.
+
+An optional companion AI service can be called by the controller to rank/choose the best action from the policy allow-list.
+
+## How it works
+
+1. The controller periodically evaluates each `SelfHealingPolicy`.
+2. Matching resources are listed using namespace + label selector.
+3. Rules are checked:
+   - `RestartCount` for Pods
+   - `UnavailableReplicas` for Deployments
+4. The action is selected:
+   - deterministic fallback: first `allowedActions` entry
+   - optional AI decision from `ai.endpoint`
+5. If not `dryRun`, healing is executed (delete, rollout restart, annotate).
+6. Status is updated with last evaluation time, last action, reason, and healed count.
+
+## Example policy
+
+```yaml
+apiVersion: reliability.platform.ai/v1alpha1
+kind: SelfHealingPolicy
+metadata:
+  name: selfhealingpolicy-sample
+  namespace: default
+spec:
+  target:
+    apiVersion: v1
+    kind: Pod
+    namespace: default
+    labelSelector:
+      app: demo
+  conditions:
+    - type: RestartCount
+      threshold: 3
+      minAgeSeconds: 60
+  allowedActions:
+    - Delete
+    - Annotate
+  ai:
+    enabled: true
+    mode: advisory
+    endpoint: http://ai-service:8081/evaluate
+    timeoutSeconds: 5
+  dryRun: true
+```
 
 ## Getting Started
 
@@ -19,10 +66,6 @@
 make docker-build docker-push IMG=<some-registry>/k8s-mend:tag
 ```
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
-
 **Install the CRDs into the cluster:**
 
 ```sh
@@ -35,101 +78,16 @@ make install
 make deploy IMG=<some-registry>/k8s-mend:tag
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
-
 **Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
 
 ```sh
 kubectl apply -k config/samples/
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
-
 ### To Uninstall
-**Delete the instances (CRs) from the cluster:**
 
 ```sh
 kubectl delete -k config/samples/
-```
-
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
 make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
 make undeploy
 ```
-
-## Project Distribution
-
-Following the options to release and provide this solution to the users.
-
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/k8s-mend:tag
-```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/k8s-mend/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-1. Build the chart using the optional helm plugin
-
-```sh
-kubebuilder edit --plugins=helm/v2-alpha
-```
-
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
-
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
-
-**NOTE:** Run `make help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
-
-## License
-
-Copyright 2026.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-

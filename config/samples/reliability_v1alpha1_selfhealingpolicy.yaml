@@ -5,5 +5,24 @@ metadata:
     app.kubernetes.io/name: k8s-mend
     app.kubernetes.io/managed-by: kustomize
   name: selfhealingpolicy-sample
+  namespace: default
 spec:
-  # TODO(user): Add fields here
+  target:
+    apiVersion: v1
+    kind: Pod
+    namespace: default
+    labelSelector:
+      app: demo
+  conditions:
+    - type: RestartCount
+      threshold: 3
+      minAgeSeconds: 60
+  allowedActions:
+    - Delete
+    - Annotate
+  ai:
+    enabled: true
+    mode: advisory
+    endpoint: http://ai-service:8081/evaluate
+    timeoutSeconds: 5
+  dryRun: true
