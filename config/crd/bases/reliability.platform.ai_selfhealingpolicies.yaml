@@ -17,7 +17,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: SelfHealingPolicy is the Schema for the selfhealingpolicies API
+        description: SelfHealingPolicy is the Schema for the selfhealingpolicies API.
         properties:
           apiVersion:
             description: |-
@@ -38,6 +38,131 @@ spec:
             type: object
           spec:
             description: spec defines the desired state of SelfHealingPolicy
+            properties:
+              ai:
+                description: AI controls optional AI integration.
+                properties:
+                  enabled:
+                    description: Enabled toggles AI-based decisioning.
+                    type: boolean
+                  endpoint:
+                    description: Endpoint is the AI evaluator endpoint, e.g. http://ai-service:8081/evaluate.
+                    type: string
+                  mode:
+                    description: Mode decides if AI is only advisory or can enforce
+                      actions.
+                    enum:
+                    - advisory
+                    - enforce
+                    type: string
+                  timeoutSeconds:
+                    description: TimeoutSeconds for the AI HTTP call.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                type: object
+              aiOptions:
+                description: 'Legacy field (deprecated): use AI.'
+                properties:
+                  enabled:
+                    type: boolean
+                  mode:
+                    type: string
+                type: object
+              allowedActions:
+                description: AllowedActions limits what this policy is allowed to
+                  do.
+                items:
+                  description: HealingAction defines the actions the controller is
+                    allowed to execute.
+                  enum:
+                  - Delete
+                  - RolloutRestart
+                  - Annotate
+                  - NoAction
+                  type: string
+                minItems: 1
+                type: array
+              conditions:
+                description: Conditions determine when to trigger healing.
+                items:
+                  description: ConditionRule configures when a resource should be
+                    considered unhealthy.
+                  properties:
+                    minAgeSeconds:
+                      description: MinAgeSeconds prevents acting on brand-new resources.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    threshold:
+                      description: Threshold is the minimum metric value that marks
+                        a resource as unhealthy.
+                      format: int32
+                      minimum: 1
+                      type: integer
+                    type:
+                      description: |-
+                        Type identifies the metric being evaluated.
+                        Supported values: RestartCount, UnavailableReplicas.
+                      type: string
+                  required:
+                  - threshold
+                  - type
+                  type: object
+                minItems: 1
+                type: array
+              dryRun:
+                description: DryRun records decisions but does not mutate resources.
+                type: boolean
+              resource:
+                description: 'Legacy field (deprecated): use Target/Conditions/AllowedActions.'
+                items:
+                  properties:
+                    conditions:
+                      properties:
+                        conditionstype:
+                          type: string
+                        restartThreshold:
+                          type: string
+                      type: object
+                    target:
+                      description: Legacy API structs retained for backward compatibility
+                        with generated code.
+                      properties:
+                        kind:
+                          type: string
+                        labelSelector:
+                          additionalProperties:
+                            type: string
+                          type: object
+                      type: object
+                  type: object
+                type: array
+              target:
+                description: Target resource selector to evaluate.
+                properties:
+                  apiVersion:
+                    description: APIVersion of the target resource, e.g. apps/v1.
+                    type: string
+                  kind:
+                    description: Kind of the resource to monitor.
+                    type: string
+                  labelSelector:
+                    additionalProperties:
+                      type: string
+                    description: LabelSelector filters resources by labels.
+                    type: object
+                  namespace:
+                    description: Namespace scope. If empty, the policy namespace is
+                      used.
+                    type: string
+                required:
+                - kind
+                type: object
+            required:
+            - allowedActions
+            - conditions
+            - target
             type: object
           status:
             description: status defines the observed state of SelfHealingPolicy
@@ -111,6 +236,26 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              healedResources:
+                description: HealedResources is the number of resources acted on in
+                  the latest run.
+                format: int32
+                type: integer
+              lastAction:
+                description: LastAction is the last selected action.
+                type: string
+              lastEvaluatedTime:
+                description: LastEvaluatedTime is when policy evaluation last completed.
+                format: date-time
+                type: string
+              lastReason:
+                description: LastReason explains why LastAction was chosen.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the latest generation reconciled
+                  by the controller.
+                format: int64
+                type: integer
             type: object
         required:
         - spec

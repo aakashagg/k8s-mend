@@ -21,6 +21,8 @@ An optional companion AI service can be called by the controller to rank/choose 
 5. If not `dryRun`, healing is executed (delete, rollout restart, annotate).
 6. Status is updated with last evaluation time, last action, reason, and healed count.
 
+
+
 ## Example policy
 
 ```yaml

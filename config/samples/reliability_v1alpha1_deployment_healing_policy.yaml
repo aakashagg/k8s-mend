@@ -1,0 +1,25 @@
+apiVersion: reliability.platform.ai/v1alpha1
+kind: SelfHealingPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: k8s-mend
+    app.kubernetes.io/managed-by: kustomize
+  name: deployment-healing-policy-sample
+  namespace: default
+spec:
+  target:
+    apiVersion: apps/v1
+    kind: Deployment
+    namespace: my-app-ns
+    labelSelector:
+      app: my-app
+  conditions:
+    - type: UnavailableReplicas
+      threshold: 1
+      minAgeSeconds: 120
+  notAllowedActions:
+    - Delete # Blacklist deleting pods for this policy
+  alert:
+    enabled: true
+    slackEndpoint: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+  dryRun: false
