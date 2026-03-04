@@ -111,9 +111,6 @@ type AIOptions struct {
 
 // SelfHealingPolicySpec defines the desired state of SelfHealingPolicy.
 type SelfHealingPolicySpec struct {
-	// Legacy field (deprecated): use Target/Conditions/AllowedActions.
-	// +optional
-	Resource []Resource `json:"resource,omitempty"`
 
 	// Legacy field (deprecated): use AI.
 	// +optional
@@ -127,17 +124,29 @@ type SelfHealingPolicySpec struct {
 	// +kubebuilder:validation:MinItems=1
 	Conditions []ConditionRule `json:"conditions"`
 
-	// AllowedActions limits what this policy is allowed to do.
-	// +kubebuilder:validation:MinItems=1
-	AllowedActions []HealingAction `json:"allowedActions"`
+	// NotAllowedActions lets you blacklist certain healing actions, e.g. if RolloutRestart is not feasible.
+	NotAllowedActions []HealingAction `json:"notAllowedActions"`
 
 	// AI controls optional AI integration.
 	// +optional
 	AI AIOptions `json:"ai,omitempty"`
 
+	// Alert configures optional alerting on unhealthy resources.
+	// +optional
+	Alert AlertOptions `json:"alert,omitempty"`
+
 	// DryRun records decisions but does not mutate resources.
 	// +optional
 	DryRun bool `json:"dryRun,omitempty"`
+}
+
+type AlertOptions struct {
+
+	// Enabled toggles AI-based decisioning.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	SlackEndpoint string `json:"slackEndpoint,omitempty"`
 }
 
 // SelfHealingPolicyStatus defines the observed state of SelfHealingPolicy.
