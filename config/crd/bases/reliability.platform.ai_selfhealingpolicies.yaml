@@ -61,17 +61,18 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
-              aiOptions:
-                description: 'Legacy field (deprecated): use AI.'
+              alert:
+                description: Alert configures optional alerting on unhealthy resources.
                 properties:
                   enabled:
+                    description: Enabled toggles AI-based decisioning.
                     type: boolean
-                  mode:
+                  slackEndpoint:
                     type: string
                 type: object
               allowedActions:
-                description: AllowedActions limits what this policy is allowed to
-                  do.
+                description: AllowedActions lets you blacklist certain healing actions,
+                  e.g. if RolloutRestart is not feasible.
                 items:
                   description: HealingAction defines the actions the controller is
                     allowed to execute.
@@ -81,7 +82,6 @@ spec:
                   - Annotate
                   - NoAction
                   type: string
-                minItems: 1
                 type: array
               conditions:
                 description: Conditions determine when to trigger healing.
@@ -114,30 +114,6 @@ spec:
               dryRun:
                 description: DryRun records decisions but does not mutate resources.
                 type: boolean
-              resource:
-                description: 'Legacy field (deprecated): use Target/Conditions/AllowedActions.'
-                items:
-                  properties:
-                    conditions:
-                      properties:
-                        conditionstype:
-                          type: string
-                        restartThreshold:
-                          type: string
-                      type: object
-                    target:
-                      description: Legacy API structs retained for backward compatibility
-                        with generated code.
-                      properties:
-                        kind:
-                          type: string
-                        labelSelector:
-                          additionalProperties:
-                            type: string
-                          type: object
-                      type: object
-                  type: object
-                type: array
               target:
                 description: Target resource selector to evaluate.
                 properties:

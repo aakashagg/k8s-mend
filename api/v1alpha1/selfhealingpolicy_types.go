@@ -24,27 +24,6 @@ import (
 // HealingAction defines the actions the controller is allowed to execute.
 type HealingAction string
 
-// Legacy API structs retained for backward compatibility with generated code.
-type Target struct {
-	Kind          string            `json:"kind,omitempty"`
-	LabelSelector map[string]string `json:"labelSelector,omitempty"`
-}
-
-type Conditions struct {
-	ConditionsType   string `json:"conditionstype,omitempty"`
-	RestartThreshold string `json:"restartThreshold,omitempty"`
-}
-
-type Resource struct {
-	Target     Target     `json:"target,omitempty"`
-	Conditions Conditions `json:"conditions,omitempty"`
-}
-
-type AiOptions struct {
-	Enabled bool   `json:"enabled,omitempty"`
-	Mode    string `json:"mode,omitempty"`
-}
-
 const (
 	HealingActionDelete         HealingAction = "Delete"
 	HealingActionRolloutRestart HealingAction = "RolloutRestart"
@@ -112,10 +91,6 @@ type AIOptions struct {
 // SelfHealingPolicySpec defines the desired state of SelfHealingPolicy.
 type SelfHealingPolicySpec struct {
 
-	// Legacy field (deprecated): use AI.
-	// +optional
-	AiOptions AiOptions `json:"aiOptions,omitempty"`
-
 	// Target resource selector to evaluate.
 	// +kubebuilder:validation:Required
 	Target ResourceSelector `json:"target"`
@@ -124,8 +99,8 @@ type SelfHealingPolicySpec struct {
 	// +kubebuilder:validation:MinItems=1
 	Conditions []ConditionRule `json:"conditions"`
 
-	// NotAllowedActions lets you blacklist certain healing actions, e.g. if RolloutRestart is not feasible.
-	NotAllowedActions []HealingAction `json:"notAllowedActions"`
+	// AllowedActions lets you blacklist certain healing actions, e.g. if RolloutRestart is not feasible.
+	AllowedActions []HealingAction `json:"allowedActions"`
 
 	// AI controls optional AI integration.
 	// +optional
