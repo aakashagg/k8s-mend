@@ -95,18 +95,22 @@ spec:
                       minimum: 0
                       type: integer
                     threshold:
-                      description: Threshold is the minimum metric value that marks
-                        a resource as unhealthy.
+                      description: |-
+                        Threshold is the minimum metric value that marks a resource as unhealthy.
+                        Required for RestartCount and UnavailableReplicas.
                       format: int32
                       minimum: 1
                       type: integer
                     type:
                       description: |-
                         Type identifies the metric being evaluated.
-                        Supported values: RestartCount, UnavailableReplicas.
+                        Supported values: RestartCount, UnavailableReplicas, HasWarningEvents.
+                      enum:
+                      - RestartCount
+                      - UnavailableReplicas
+                      - HasWarningEvents
                       type: string
                   required:
-                  - threshold
                   - type
                   type: object
                 minItems: 1

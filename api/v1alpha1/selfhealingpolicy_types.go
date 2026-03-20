@@ -53,13 +53,16 @@ type ResourceSelector struct {
 // ConditionRule configures when a resource should be considered unhealthy.
 type ConditionRule struct {
 	// Type identifies the metric being evaluated.
-	// Supported values: RestartCount, UnavailableReplicas.
+	// Supported values: RestartCount, UnavailableReplicas, HasWarningEvents.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=RestartCount;UnavailableReplicas;HasWarningEvents
 	Type string `json:"type"`
 
 	// Threshold is the minimum metric value that marks a resource as unhealthy.
+	// Required for RestartCount and UnavailableReplicas.
 	// +kubebuilder:validation:Minimum=1
-	Threshold int32 `json:"threshold"`
+	// +optional
+	Threshold int32 `json:"threshold,omitempty"`
 
 	// MinAgeSeconds prevents acting on brand-new resources.
 	// +kubebuilder:validation:Minimum=0

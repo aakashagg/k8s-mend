@@ -25,6 +25,7 @@ import (
 	"sort"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -147,7 +148,10 @@ func (r *SelfHealingPolicyReconciler) handleUnstructured(
 	lastReason := "No unhealthy resources detected"
 	for i := range list.Items {
 		resource := &list.Items[i]
-		unhealthy, reason := r.isUnhealthy(resource, policy.Spec.Conditions)
+		unhealthy, reason, err := r.isUnhealthy(ctx, resource, policy.Spec.Conditions)
+		if err != nil {
+			return 0, "NoAction", "failed to check resource health", err
+		}
 		if !unhealthy {
 			continue
 		}
@@ -172,7 +176,7 @@ func (r *SelfHealingPolicyReconciler) handleUnstructured(
 	return healed, lastAction, lastReason, nil
 }
 
-func (r *SelfHealingPolicyReconciler) isUnhealthy(resource *unstructured.Unstructured, rules []reliabilityv1alpha1.ConditionRule) (bool, string) {
+func (r *SelfHealingPolicyReconciler) isUnhealthy(ctx context.Context, resource *unstructured.Unstructured, rules []reliabilityv1alpha1.ConditionRule) (bool, string, error) {
 	ageSeconds := int64(time.Since(resource.GetCreationTimestamp().Time).Seconds())
 	for _, rule := range rules {
 		if ageSeconds < rule.MinAgeSeconds {
@@ -181,6 +185,9 @@ func (r *SelfHealingPolicyReconciler) isUnhealthy(resource *unstructured.Unstruc
 
 		switch rule.Type {
 		case "RestartCount":
+			if rule.Threshold == 0 {
+				continue
+			}
 			var restartCount int32
 			containerStatuses, found, err := unstructured.NestedSlice(resource.Object, "status", "containerStatuses")
 			if !found || err != nil {
@@ -195,19 +202,40 @@ func (r *SelfHealingPolicyReconciler) isUnhealthy(resource *unstructured.Unstruc
 			}
 
 			if restartCount >= rule.Threshold {
-				return true, fmt.Sprintf("pod restart count %d >= %d", restartCount, rule.Threshold)
+				return true, fmt.Sprintf("pod restart count %d >= %d", restartCount, rule.Threshold), nil
 			}
 		case "UnavailableReplicas":
+			if rule.Threshold == 0 {
+				continue
+			}
 			unavailable, found, err := unstructured.NestedInt64(resource.Object, "status", "unavailableReplicas")
 			if !found || err != nil {
 				continue
 			}
 			if int32(unavailable) >= rule.Threshold {
-				return true, fmt.Sprintf("unavailable replicas %d >= %d", unavailable, rule.Threshold)
+				return true, fmt.Sprintf("unavailable replicas %d >= %d", unavailable, rule.Threshold), nil
+			}
+		case "HasWarningEvents":
+			var eventList corev1.EventList
+			opts := []client.ListOption{
+				client.InNamespace(resource.GetNamespace()),
+				client.MatchingFields{"involvedObject.name": resource.GetName()},
+			}
+			if err := r.List(ctx, &eventList, opts...); err != nil {
+				return false, "", fmt.Errorf("failed to list events: %w", err)
+			}
+
+			for _, event := range eventList.Items {
+				if event.InvolvedObject.UID == resource.GetUID() && event.Type == corev1.EventTypeWarning {
+					// Consider events within the last hour to be recent.
+					if event.LastTimestamp.Time.After(time.Now().Add(-1 * time.Hour)) {
+						return true, fmt.Sprintf("found warning event: %s", event.Message), nil
+					}
+				}
 			}
 		}
 	}
-	return false, ""
+	return false, "", nil
 }
 
 func (r *SelfHealingPolicyReconciler) executeAction(ctx context.Context, policy *reliabilityv1alpha1.SelfHealingPolicy, resource *unstructured.Unstructured, action reliabilityv1alpha1.HealingAction) error {
@@ -351,6 +379,13 @@ func (r *SelfHealingPolicyReconciler) callAIService(
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SelfHealingPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Event{}, "involvedObject.name", func(rawObj client.Object) []string {
+		event := rawObj.(*corev1.Event)
+		return []string{event.InvolvedObject.Name}
+	}); err != nil {
+		return err
+	}
+
 	if r.HTTPClient == nil {
 		r.HTTPClient = &http.Client{Timeout: defaultAITimeoutSeconds * time.Second}
 	}
