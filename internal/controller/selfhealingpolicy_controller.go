@@ -26,6 +26,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -108,7 +109,7 @@ func (r *SelfHealingPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	policy.Status.HealedResources = healed
 	policy.Status.LastAction = lastAction
 	policy.Status.LastReason = lastReason
-	metav1.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
+	apimeta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
 		Type:               conditionTypeReady,
 		Status:             metav1.ConditionTrue,
 		Reason:             reasonEvaluated,
@@ -136,7 +137,11 @@ func (r *SelfHealingPolicyReconciler) handleUnstructured(
 
 	gvk := schema.FromAPIVersionAndKind(policy.Spec.Target.APIVersion, policy.Spec.Target.Kind)
 	list := &unstructured.UnstructuredList{}
-	list.SetGroupVersionKind(gvk)
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   gvk.Group,
+		Version: gvk.Version,
+		Kind:    gvk.Kind + "List",
+	})
 
 	selector := labels.SelectorFromSet(policy.Spec.Target.LabelSelector)
 	if err := r.List(ctx, list, client.InNamespace(ns), client.MatchingLabelsSelector{Selector: selector}); err != nil {
@@ -155,10 +160,7 @@ func (r *SelfHealingPolicyReconciler) handleUnstructured(
 		if !unhealthy {
 			continue
 		}
-		var metric int32
-		if val, ok := resource.Object["restartCount"].(int32); ok {
-			metric = val
-		}
+		metric := restartCount(resource)
 		action, aiReason, err := r.pickAction(ctx, policy, allowed, resource.GetKind(), resource.GetName(), resource.GetNamespace(), metric, reason, time.Since(resource.GetCreationTimestamp().Time))
 		if err != nil {
 			return healed, lastAction, lastReason, err
@@ -188,21 +190,9 @@ func (r *SelfHealingPolicyReconciler) isUnhealthy(ctx context.Context, resource 
 			if rule.Threshold == 0 {
 				continue
 			}
-			var restartCount int32
-			containerStatuses, found, err := unstructured.NestedSlice(resource.Object, "status", "containerStatuses")
-			if !found || err != nil {
-				continue
-			}
-			for _, status := range containerStatuses {
-				if containerStatus, ok := status.(map[string]interface{}); ok {
-					if count, found, err := unstructured.NestedInt64(containerStatus, "restartCount"); found && err == nil {
-						restartCount += int32(count)
-					}
-				}
-			}
-
-			if restartCount >= rule.Threshold {
-				return true, fmt.Sprintf("pod restart count %d >= %d", restartCount, rule.Threshold), nil
+			count := restartCount(resource)
+			if count >= rule.Threshold {
+				return true, fmt.Sprintf("pod restart count %d >= %d", count, rule.Threshold), nil
 			}
 		case "UnavailableReplicas":
 			if rule.Threshold == 0 {
@@ -236,6 +226,22 @@ func (r *SelfHealingPolicyReconciler) isUnhealthy(ctx context.Context, resource 
 		}
 	}
 	return false, "", nil
+}
+
+func restartCount(resource *unstructured.Unstructured) int32 {
+	var count int32
+	containerStatuses, found, err := unstructured.NestedSlice(resource.Object, "status", "containerStatuses")
+	if !found || err != nil {
+		return 0
+	}
+	for _, status := range containerStatuses {
+		if containerStatus, ok := status.(map[string]interface{}); ok {
+			if restarts, found, err := unstructured.NestedInt64(containerStatus, "restartCount"); found && err == nil {
+				count += int32(restarts)
+			}
+		}
+	}
+	return count
 }
 
 func (r *SelfHealingPolicyReconciler) executeAction(ctx context.Context, policy *reliabilityv1alpha1.SelfHealingPolicy, resource *unstructured.Unstructured, action reliabilityv1alpha1.HealingAction) error {
@@ -287,6 +293,10 @@ func (r *SelfHealingPolicyReconciler) pickAction(
 	sort.Slice(allowedList, func(i, j int) bool {
 		return allowedList[i] < allowedList[j]
 	})
+
+	if len(allowedList) == 0 {
+		return reliabilityv1alpha1.HealingActionNoAction, "no allowed actions configured", nil
+	}
 
 	fallback := allowedList[0]
 	if !policy.Spec.AI.Enabled {
